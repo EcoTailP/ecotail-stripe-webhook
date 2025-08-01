@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Stripe Terminal Test</title>
+</head>
+<body>
+  <h1>Stripe Terminal Payment</h1>
+
+  <button id="connect-reader">Connect Reader</button>
+  <button id="collect-payment" disabled>Collect Payment</button>
+
+  <script src="https://js.stripe.com/terminal/v1/"></script>
+  <script>
+    const terminal = StripeTerminal.create({
+    onFetchConnectionToken: async () => {
+      const res = await fetch('http://localhost:4242/terminal/connection-token', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      return data.secret;
+    },
+    onUnexpectedReaderDisconnect: () => {
+      alert("⚠️ Reader disconnected unexpectedly.");
+    },
+  });
+
+    let reader = null;
+    let paymentIntent = null;
+
+    document.getElementById('connect-reader').addEventListener('click', async () => {
+      const result = await terminal.discoverReaders({ simulated: true });
+      if (result.error) {
+        alert('Error discovering readers: ' + result.error.message);
+        return;
+      }
+
+      if (result.discoveredReaders.length === 0) {
+        alert('No readers found.');
+        return;
+      }
+
+      const connectResult = await terminal.connectReader(result.discoveredReaders[0]);
+      if (connectResult.error) {
+        alert('Failed to connect: ' + connectResult.error.message);
+        return;
+      }
+
+      reader = connectResult.reader;
+      alert('Connected to reader: ' + reader.label);
+      document.getElementById('collect-payment').disabled = false;
+    });
+
+    document.getElementById('collect-payment').addEventListener('click', async () => {
+      const backendRes = await fetch('http://localhost:4242/payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: 1000, // $10
+          connectedAccountId: 'acct_1234567890' // replace with real connected account
+        }),
+      });
+
+      const { client_secret } = await backendRes.json();
+      const piResult = await terminal.collectPaymentMethod({ clientSecret: client_secret });
+
+      if (piResult.error) {
+        alert('Collect failed: ' + piResult.error.message);
+        return;
+      }
+
+      const processResult = await terminal.processPayment(piResult.paymentIntent);
+      if (processResult.error) {
+        alert('Payment failed: ' + processResult.error.message);
+      } else {
+        alert('✅ Payment successful! ID: ' + processResult.paymentIntent.id);
+      }
+    });
+  </script>
+</body>
+</html>
