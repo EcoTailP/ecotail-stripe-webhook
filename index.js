@@ -9,13 +9,8 @@ const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Use raw body parser for webhooks, JSON for everything else
-app.use((req, res, next) => {
-  if (req.originalUrl === '/webhook') {
-    bodyParser.raw({ type: 'application/json' })(req, res, next);
-  } else {
-    bodyParser.json()(req, res, next);
-  }
-});
+app.use('/webhook', bodyParser.raw({ type: 'application/json' }));
+app.use(bodyParser.json());
 
 // In-memory access tracking (replace with DB later if needed)
 const userAccess = {};
@@ -49,24 +44,21 @@ app.post('/webhook', async (req, res) => {
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
-    console.error('Webhook error:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    console.error('Webhook signature error:', err.message);
+    // Always respond 200 to Stripe to avoid retries
+    return res.status(200).send('Webhook received (signature error)');
   }
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
-
     try {
       const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
         limit: 1,
       });
-
       const productId = lineItems.data[0].price.product;
       const email = session.customer_email;
-
       const TIER1_ID = process.env.TIER1_PRODUCT_ID;
       const TIER2_ID = process.env.TIER2_PRODUCT_ID;
-
       if (productId === TIER1_ID) {
         userAccess[email] = 'Tier 1';
         console.log(`✅ Assigned Tier 1 access to ${email}`);
@@ -76,15 +68,14 @@ app.post('/webhook', async (req, res) => {
       } else {
         console.warn(`⚠️ Unknown product ID purchased by ${email}`);
       }
-
-      res.status(200).send();
     } catch (err) {
-      console.error('Error handling webhook:', err.message);
-      res.status(500).send();
+      console.error('Error handling checkout.session.completed:', err.message);
+      // Do not send 500, always respond 200
     }
-  } else {
-    res.status(200).send();
+    return res.status(200).send('Webhook processed');
   }
+  // For all other events, respond 200
+  return res.status(200).send('Webhook received');
 });
 
 // ✅ View access status by email
