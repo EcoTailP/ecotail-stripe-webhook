@@ -1,0 +1,21 @@
+{
+  "name": "ecotail-stripe-webhook",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build step needed'",
+    "start": "vercel dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Stripe webhook for tier-based access control",
+  "dependencies": {
+    "micro": "^9.4.1",
+    "stripe": "^18.4.0"
+  },
+  "devDependencies": {
+    "vercel": "^28.4.8"
+  }
+}
